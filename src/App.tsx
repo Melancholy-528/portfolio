@@ -25,7 +25,7 @@ const mangaFavorites: Favorite[] = [
   { title: 'Kaguya-sama: Love Is War', note: 'A rom-com where every confession is a battle.' },
   { title: 'Tokyo Ghoul', note: 'A life split between two worlds.' },
 ]
-const aniListUsername = 'alphaluck'
+const aniListUsername = 'Alpha882882'
 type MediaKind = 'ANIME' | 'MANGA'
 type FavoriteArt = { coverImage?: { extraLarge?: string; large?: string } }
 type AniListEntry = { status: string; progress?: number; notes?: string | null; media: { title: { userPreferred?: string; english?: string | null; romaji: string }; siteUrl: string; coverImage?: { extraLarge?: string | null; large?: string | null; medium?: string | null }; episodes?: number | null; chapters?: number | null } }

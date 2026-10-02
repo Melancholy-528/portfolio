@@ -1,0 +1,428 @@
+import { useEffect, useRef, useState } from 'react'
+
+const playlist = [
+  { title: 'Anytime Anywhere', image: './milet.jpg', audio: './[028] Milet ~ Anytime Anywhere _ Lyrics RomEng [(Onion Subs)].m4a' },
+  { title: 'Haru', image: './Haruyorusika.jpg', audio: './haru.mp3' },
+]
+const terminalPages = [
+  ['neofetch', 'Distro: Omarchy · Fedora 44', 'CPU: i5 11400H', 'GPU: GTX 1650', 'RAM: 24 gigs'],
+  ['ls skills/', 'HTML', 'CSS', 'Python', 'C (basic)', 'Linux'],
+  ['ls Hobbies/', 'Anime', 'Coding', 'Linux'],
+  ['Favorite shows', 'Neon Genesis Evangelion', 'Serial Experiments Lain', 'Dragon Ball', 'Re:Zero', 'Eighty-Six'],
+]
+type Favorite = { title: string; note: string }
+const animeFavorites: Favorite[] = [
+  { title: 'Neon Genesis Evangelion', note: 'Mecha on the surface; existential questions underneath.' },
+  { title: 'Serial Experiments Lain', note: 'A lonely, strange trip through the Wired.' },
+  { title: 'Dragon Ball', note: 'Big adventures and even bigger fights.' },
+  { title: 'Re:Zero', note: 'Fantasy built around a brutal reset button.' },
+  { title: 'Eighty-Six', note: 'War, prejudice, and the people caught between them.' },
+]
+const mangaFavorites: Favorite[] = [
+  { title: 'Oyasumi Punpun', note: 'A coming-of-age story that turns painfully surreal.' },
+  { title: 'Neon Genesis Evangelion', note: 'The familiar descent, told in a different form.' },
+  { title: 'Chainsaw Man', note: 'Chaotic devil hunting with a softer center.' },
+  { title: 'Kaguya-sama: Love Is War', note: 'A rom-com where every confession is a battle.' },
+  { title: 'Tokyo Ghoul', note: 'A life split between two worlds.' },
+]
+const aniListUsername = 'alphaluck'
+type MediaKind = 'ANIME' | 'MANGA'
+type FavoriteArt = { coverImage?: { extraLarge?: string; large?: string } }
+type AniListEntry = { status: string; progress?: number; notes?: string | null; media: { title: { userPreferred?: string; english?: string | null; romaji: string }; siteUrl: string; coverImage?: { extraLarge?: string | null; large?: string | null; medium?: string | null }; episodes?: number | null; chapters?: number | null } }
+type CurrentWeather = { temperature_2m: number; apparent_temperature: number; relative_humidity_2m: number; weather_code: number; wind_speed_10m: number }
+type RecentTrack = { name: string; artist: { '#text'?: string } | string; image?: { size: string; '#text': string }[] }
+type GitHubRepository = { id: number; name: string; html_url: string; description: string | null; language: string | null; updated_at: string; fork: boolean; archived: boolean }
+type GitHubEvent = { id: string; type: string; created_at: string; repo: { name: string }; payload: { action?: string; ref_type?: string } }
+const contributionChartUrl = 'https://gh-heat.anishroy.com/api/Melancholy-528/svg?theme=green&darkMode=true&transparent=true&shape=square&cellSize=11&cellGap=3'
+
+function eventLabel(event: GitHubEvent) {
+  switch (event.type) {
+    case 'PushEvent': return 'Pushed updates to'
+    case 'CreateEvent': return `Created a ${event.payload.ref_type || 'branch'} in`
+    case 'WatchEvent': return 'Starred'
+    case 'ForkEvent': return 'Forked'
+    case 'IssuesEvent': return `${event.payload.action || 'Updated'} an issue in`
+    case 'PullRequestEvent': return `${event.payload.action || 'Updated'} a pull request in`
+    case 'ReleaseEvent': return 'Published a release in'
+    case 'PublicEvent': return 'Made public'
+    default: return 'Activity in'
+  }
+}
+
+function formatActivityDate(value: string) {
+  const date = new Date(value)
+  const age = Date.now() - date.getTime()
+  const minutes = Math.floor(age / 60_000)
+  if (minutes < 60) return `${Math.max(1, minutes)}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
+}
+
+function weatherDescription(code: number) {
+  if (code === 0) return 'Clear sky'
+  if ([1, 2].includes(code)) return 'Partly cloudy'
+  if (code === 3) return 'Overcast'
+  if ([45, 48].includes(code)) return 'Foggy'
+  if ([51, 53, 55, 56, 57].includes(code)) return 'Drizzle'
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'Rain'
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snow'
+  if ([95, 96, 99].includes(code)) return 'Thunderstorm'
+  return 'Current conditions'
+}
+
+function AniListNow({ username }: { username: string }) {
+  const [entries, setEntries] = useState<{ anime: AniListEntry[]; manga: AniListEntry[] } | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const query = 'query ($userName: String!, $type: MediaType!) { MediaListCollection(userName: $userName, type: $type) { lists { entries { status progress notes media { title { userPreferred english romaji } siteUrl coverImage { extraLarge large medium } episodes chapters } } } } }'
+    const load = async (type: MediaKind) => {
+      const response = await fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ query, variables: { userName: username, type } }),
+      })
+      if (!response.ok) throw new Error('AniList request failed')
+      const result = await response.json()
+      if (result?.errors?.length) throw new Error('AniList list unavailable')
+      const lists = result?.data?.MediaListCollection?.lists ?? []
+      return lists.flatMap((list: { entries?: AniListEntry[] }) => list.entries ?? []).filter((entry: AniListEntry) => entry.status === 'CURRENT') as AniListEntry[]
+    }
+    Promise.all([load('ANIME'), load('MANGA')]).then(([anime, manga]) => {
+      if (!controller.signal.aborted) setEntries({ anime: anime.slice(0, 3), manga: manga.slice(0, 3) })
+    }).catch(() => { if (!controller.signal.aborted) setFailed(true) })
+    const refresh = window.setInterval(() => {
+      if (controller.signal.aborted) return
+      Promise.all([load('ANIME'), load('MANGA')]).then(([anime, manga]) => {
+        if (!controller.signal.aborted) { setEntries({ anime: anime.slice(0, 3), manga: manga.slice(0, 3) }); setFailed(false) }
+      }).catch(() => { if (!controller.signal.aborted) setFailed(true) })
+    }, 30 * 60 * 1000)
+    return () => { controller.abort(); window.clearInterval(refresh) }
+  }, [username])
+
+  const group = (kind: MediaKind, items: AniListEntry[]) => <div className={`current-group ${kind === 'ANIME' ? 'is-anime' : 'is-manga'}`}>
+    <div className="current-group-heading"><span className="eyebrow">{kind === 'ANIME' ? 'WATCHING' : 'READING'}</span><span className="current-count">{String(items.length).padStart(2, '0')} {items.length === 1 ? 'title' : 'titles'}</span></div>
+    {items.length ? <ul>{items.map((entry) => {
+      const name = entry.media.title.userPreferred || entry.media.title.english || entry.media.title.romaji
+      const total = kind === 'ANIME' ? entry.media.episodes : entry.media.chapters
+      const unit = kind === 'ANIME' ? 'episodes' : 'chapters'
+      const progress = entry.progress || 0
+      const progressPercent = total ? Math.min(100, Math.round((progress / total) * 100)) : 0
+      const cover = entry.media.coverImage?.extraLarge || entry.media.coverImage?.large || entry.media.coverImage?.medium
+      return <li className="current-title" key={entry.media.siteUrl}>
+        <a className="current-cover" href={entry.media.siteUrl} target="_blank" rel="noreferrer" aria-label={`Open ${name} on AniList`}>
+          <span aria-hidden="true">{name.split(/\s+/).map((word) => word[0]).join('').slice(0, 3)}</span>
+          {cover && <img src={cover} alt="" loading="eager" onError={(event) => { event.currentTarget.style.opacity = '0' }} />}
+        </a>
+        <div className="current-title-copy">
+          <a className="current-title-name" href={entry.media.siteUrl} target="_blank" rel="noreferrer">{name}<span aria-hidden="true">↗</span></a>
+          <div className="current-progress-label">{total ? `${progress} / ${total} ${unit}` : `${progress} ${unit}`}</div>
+          {total && <div className="current-progress-track" role="progressbar" aria-label={`${name} progress`} aria-valuenow={Math.min(progress, total)} aria-valuemin={0} aria-valuemax={total}><span style={{ width: `${progressPercent}%` }} /></div>}
+          {entry.notes && <p>{entry.notes}</p>}
+        </div>
+      </li>
+    })}</ul> : <p className="current-empty">Nothing marked current.</p>}
+  </div>
+
+  return <section className="current-panel" aria-label="Currently watching and reading on AniList">
+    <div className="current-panel-heading"><h2>Currently into</h2></div>
+    {failed ? <p className="current-empty">Couldn’t load this public AniList list.</p> : entries ? <div className="current-groups">{group('ANIME', entries.anime)}{group('MANGA', entries.manga)}</div> : <p className="current-empty">Loading your current list…</p>}
+  </section>
+}
+
+function MediaCarousel({ title, kind, items }: { title: string; kind: MediaKind; items: Favorite[] }) {
+  const carouselRef = useRef<HTMLDivElement>(null)
+  const [art, setArt] = useState<Record<string, string>>({})
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const query = 'query ($search: String, $type: MediaType) { Media(search: $search, type: $type) { coverImage { extraLarge large } } }'
+    Promise.all(items.map(async ({ title: search }) => {
+      try {
+        const response = await fetch('https://graphql.anilist.co', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ query, variables: { search, type: kind } }),
+        })
+        if (!response.ok) throw new Error('Cover request failed')
+        const result = await response.json()
+        const image = (result?.data?.Media as FavoriteArt | undefined)?.coverImage?.extraLarge || (result?.data?.Media as FavoriteArt | undefined)?.coverImage?.large
+        return image ? [search, image] as const : null
+      } catch {
+        return null
+      }
+    })).then((results) => {
+      if (!controller.signal.aborted) setArt(Object.fromEntries(results.filter((entry): entry is readonly [string, string] => entry !== null)))
+      if (!controller.signal.aborted && results.every((entry) => entry === null)) setFailed(true)
+    })
+    return () => controller.abort()
+  }, [items, kind])
+
+  const move = (direction: -1 | 1) => carouselRef.current?.scrollBy({ left: direction * 260, behavior: 'smooth' })
+
+  return <section className="favorites-shelf" aria-label={`${title} favorites`}>
+    <div className="shelf-heading"><div><span className="eyebrow">{kind === 'ANIME' ? 'ANIMATION' : 'ON PAPER'}</span><h2>{title}</h2></div>
+      <div className="shelf-controls"><span className="panel-index">{String(items.length).padStart(2, '0')}</span><button aria-label={`Scroll ${title} left`} onClick={() => move(-1)}>←</button><button aria-label={`Scroll ${title} right`} onClick={() => move(1)}>→</button></div>
+    </div>
+    <div className="media-carousel" ref={carouselRef} tabIndex={0} aria-label={`${title} image carousel`}>
+      {items.map(({ title: name, note }, index) => <article className="media-card" key={name}>
+        <div className="media-cover">
+          {art[name] ? <img src={art[name]} alt={`${name} ${kind === 'ANIME' ? 'poster' : 'manga cover'}`} loading="lazy" onError={() => setArt((previous) => { const next = { ...previous }; delete next[name]; return next })} /> : <div className="media-cover-placeholder" aria-hidden="true">{failed ? 'Image unavailable' : name.split(/\s+/).map((word) => word[0]).join('').slice(0, 3)}</div>}
+          <span>{String(index + 1).padStart(2, '0')}</span>
+        </div>
+        <h3>{name}</h3>
+        <p className="media-note">{note}</p>
+      </article>)}
+    </div>
+  </section>
+}
+
+function FavoritesPage() {
+  return <main className="app is-entered">
+    <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
+    <div className="page-shell favorites-shell">
+      <a className="back-link" href="./"><span aria-hidden="true">←</span> Back to home</a>
+      <header className="favorites-header">
+        <span className="eyebrow">A PERSONAL LIST</span>
+        <h1>Favorites</h1>
+        <p>Anime and manga on my favorites list.</p>
+      </header>
+      <div className="favorites-shelves">
+        <MediaCarousel title="Anime" kind="ANIME" items={animeFavorites} />
+        <MediaCarousel title="Manga" kind="MANGA" items={mangaFavorites} />
+      </div>
+      <p className="favorites-credit">Cover images from <a href="https://anilist.co/" target="_blank" rel="noreferrer">AniList</a>.</p>
+    </div>
+  </main>
+}
+
+function HomePage() {
+  const [entered, setEntered] = useState(false)
+  const [profile, setProfile] = useState<{ name: string; avatar: string; decoration?: string; status: string }>()
+  const [recentTracks, setRecentTracks] = useState<RecentTrack[]>([])
+  const [repositories, setRepositories] = useState<GitHubRepository[] | null>(null)
+  const [githubEvents, setGithubEvents] = useState<GitHubEvent[] | null>(null)
+  const [repositoriesFailed, setRepositoriesFailed] = useState(false)
+  const [eventsFailed, setEventsFailed] = useState(false)
+  const [contributionChartFailed, setContributionChartFailed] = useState(false)
+  const [terminalIndex, setTerminalIndex] = useState(0)
+  const [visibleLines, setVisibleLines] = useState<string[]>([])
+  const [currentTrack, setCurrentTrack] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [weather, setWeather] = useState<CurrentWeather | null>(null)
+  const [weatherFailed, setWeatherFailed] = useState(false)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('https://api.lanyard.rest/v1/users/792370349652049960', { signal: controller.signal })
+      .then((res) => res.json()).then((result) => {
+        const user = result?.data?.discord_user
+        if (!user) return
+        const format = user.avatar?.startsWith('a_') ? 'gif' : 'webp'
+        setProfile({
+          name: user.global_name || user.username || 'Melancholy',
+          avatar: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${format}?size=240`,
+          decoration: user.avatar_decoration_data?.asset ? `https://cdn.discordapp.com/avatar-decoration-presets/${user.avatar_decoration_data.asset}.webp?size=240` : undefined,
+          status: result.data.discord_status || 'offline',
+        })
+      }).catch(() => undefined)
+    fetch('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=melancholy55838&api_key=ad45b0df4ea54c0597c6c74d60b79119&format=json&limit=10', { signal: controller.signal })
+      .then((res) => res.json()).then((result) => setRecentTracks(result?.recenttracks?.track?.slice(0, 10) ?? [])).catch(() => undefined)
+    const repositoriesRequest = fetch('https://api.github.com/users/Melancholy-528/repos?sort=updated&per_page=100', { signal: controller.signal })
+      .then((res) => { if (!res.ok) throw new Error('GitHub request failed'); return res.json() as Promise<GitHubRepository[]> })
+    const portfolioRequest = fetch('https://api.github.com/repos/Melancholy-528/my-portfolio', { signal: controller.signal })
+      .then((res) => res.ok ? res.json() as Promise<GitHubRepository> : null)
+      .catch(() => null)
+    Promise.all([repositoriesRequest, portfolioRequest])
+      .then(([repos, portfolio]) => {
+        const eligible = repos.filter((repo) => !repo.fork && !repo.archived && !repo.name.toLowerCase().includes('twitter-sentiment-analysis'))
+        const featuredPortfolio = portfolio || eligible.find((repo) => repo.name.toLowerCase() === 'my-portfolio')
+        const selected = featuredPortfolio
+          ? [featuredPortfolio, ...eligible.filter((repo) => repo.id !== featuredPortfolio.id)]
+          : eligible
+        if (!controller.signal.aborted) setRepositories(selected.slice(0, 3))
+      })
+      .catch(() => { if (!controller.signal.aborted) { setRepositories([]); setRepositoriesFailed(true) } })
+    fetch('https://api.github.com/users/Melancholy-528/events/public?per_page=30', { signal: controller.signal })
+      .then((res) => { if (!res.ok) throw new Error('GitHub request failed'); return res.json() })
+      .then((events: GitHubEvent[]) => setGithubEvents(events.filter((event) => ['PushEvent', 'CreateEvent', 'WatchEvent', 'ForkEvent', 'IssuesEvent', 'PullRequestEvent', 'ReleaseEvent', 'PublicEvent'].includes(event.type)).slice(0, 6)))
+      .catch(() => { if (!controller.signal.aborted) { setGithubEvents([]); setEventsFailed(true) } })
+    const loadWeather = () => fetch('https://api.open-meteo.com/v1/forecast?latitude=29.0588&longitude=76.0856&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=Asia%2FKolkata', { signal: controller.signal })
+      .then((res) => { if (!res.ok) throw new Error('Weather request failed'); return res.json() })
+      .then((result) => setWeather(result?.current ?? null))
+      .catch(() => { if (!controller.signal.aborted) setWeatherFailed(true) })
+    void loadWeather()
+    const weatherTimer = window.setInterval(() => { if (!controller.signal.aborted) void loadWeather() }, 15 * 60 * 1000)
+    return () => { controller.abort(); window.clearInterval(weatherTimer) }
+  }, [])
+
+  useEffect(() => {
+    const lines = terminalPages[terminalIndex]
+    let lineIndex = 0
+    let characterCount = 0
+    let timer = 0
+    setVisibleLines([])
+    const type = () => {
+      if (lineIndex >= lines.length) {
+        timer = window.setTimeout(() => setTerminalIndex((index) => (index + 1) % terminalPages.length), 3200)
+        return
+      }
+      const activeLine = lineIndex
+      const text = lines[activeLine]
+      characterCount += 1
+      const typedText = [...text].slice(0, characterCount).join('')
+      setVisibleLines((previous) => {
+        const next = [...previous]
+        next[activeLine] = typedText
+        return next
+      })
+      if (characterCount >= [...text].length) {
+        lineIndex += 1
+        characterCount = 0
+        timer = window.setTimeout(type, 360)
+      } else {
+        timer = window.setTimeout(type, 85)
+      }
+    }
+    timer = window.setTimeout(type, 450)
+    return () => window.clearTimeout(timer)
+  }, [terminalIndex])
+
+  const togglePlayback = async () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (playing) { audio.pause(); setPlaying(false); return }
+    try { await audio.play(); setPlaying(true) } catch { setPlaying(false) }
+  }
+  const changeTrack = async (index: number) => {
+    setCurrentTrack(index)
+    setProgress(0)
+    setDuration(0)
+    const audio = audioRef.current
+    if (!audio) return
+    audio.src = playlist[index].audio
+    try { await audio.play(); setPlaying(true) } catch { setPlaying(false) }
+  }
+  const selected = playlist[currentTrack]
+
+  return <main className={`app ${entered ? 'is-entered' : ''}`}>
+    <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
+    {!entered && <div className="enter-screen"><button className="enter-button" onClick={() => setEntered(true)}>Click to enter <span aria-hidden="true">↗</span></button></div>}
+    <div className="page-shell">
+      <section className="profile-card" id="top">
+        <div className="profile-copy">
+          <div className="eyebrow"><span className={`status-indicator ${profile?.status || 'offline'}`} />{profile?.status === 'online' ? 'around right now' : profile?.status === 'idle' ? 'away for a bit' : profile?.status === 'dnd' ? 'keeping quiet' : profile ? 'not around right now' : 'discord status unavailable'}</div>
+          <h1>Hey, I’m <span>{profile?.name || 'Melancholy'}</span>.</h1>
+          <p className="profile-description">Anime enthusiast, CS student, and your average guy.</p>
+          <nav className="social-links" aria-label="Social links">
+            <a href="https://discordapp.com/users/792370349652049960" target="_blank" rel="noreferrer">Discord <span aria-hidden="true">↗</span></a>
+            <a href="https://www.instagram.com/chillin_in_the_back_room/" target="_blank" rel="noreferrer">Instagram <span aria-hidden="true">↗</span></a>
+            <a href="https://github.com/Melancholy-528" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+          </nav>
+          <a className="favorites-cta" href="./favorites.html">Anime &amp; manga favorites <span aria-hidden="true">↗</span></a>
+        </div>
+        <div className="profile-art">
+          <div className="avatar-wrap">
+            {profile ? <img className="aboutme-img" src={profile.avatar} alt="Discord avatar" /> : <div className="avatar-placeholder">M</div>}
+            {profile?.decoration && <img className="avatar-decoration" src={profile.decoration} alt="" />}
+          </div>
+        </div>
+      </section>
+
+      <section className="weather-strip" aria-label="Current weather in Haryana, India">
+        <div className="weather-place"><span className="eyebrow">WEATHER · STATE ESTIMATE</span><h2>Haryana, India</h2></div>
+        {weather ? <>
+          <div className="weather-now"><span className="weather-symbol" aria-hidden="true">{weather.weather_code === 0 ? '☀' : [1, 2, 3].includes(weather.weather_code) ? '◒' : [95, 96, 99].includes(weather.weather_code) ? 'ϟ' : '☁'}</span><strong>{Math.round(weather.temperature_2m)}°</strong><span>{weatherDescription(weather.weather_code)}</span></div>
+          <div className="weather-detail"><span>Feels like</span><strong>{Math.round(weather.apparent_temperature)}°C</strong></div>
+          <div className="weather-detail"><span>Humidity</span><strong>{weather.relative_humidity_2m}%</strong></div>
+          <div className="weather-detail"><span>Wind</span><strong>{Math.round(weather.wind_speed_10m)} km/h</strong></div>
+        </> : <p className="weather-message">{weatherFailed ? 'Weather is unavailable right now.' : 'Loading current conditions…'}</p>}
+        <a className="weather-source" href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
+      </section>
+
+      <AniListNow username={aniListUsername} />
+
+      <div className="content-grid">
+        <section className="panel music" aria-label="Music player">
+          <div className="panel-heading"><div><span className="eyebrow">ON REPEAT</span><h2>Listening to</h2></div><span className="panel-index">01</span></div>
+          <img src={selected.image} alt={`${selected.title} cover`} className="song-img" />
+          <div className="song-meta"><h3>{selected.title}</h3><span>{currentTrack === 0 ? 'milet' : 'Yorushika'}</span></div>
+          <audio ref={audioRef} src={selected.audio} onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)} onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)} onEnded={() => setPlaying(false)} />
+          <input aria-label="Track position" className="bar" type="range" min="0" max={duration} value={progress} onChange={(event) => { if (audioRef.current) audioRef.current.currentTime = Number(event.target.value); setProgress(Number(event.target.value)) }} />
+          <div className="controls">
+            <button aria-label="Previous track" onClick={() => changeTrack((currentTrack + playlist.length - 1) % playlist.length)}><span aria-hidden="true">|◀</span></button>
+            <button className="play-button" aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlayback}><span aria-hidden="true">{playing ? 'Ⅱ' : '▶'}</span></button>
+            <button aria-label="Next track" onClick={() => changeTrack((currentTrack + 1) % playlist.length)}><span aria-hidden="true">▶|</span></button>
+          </div>
+        </section>
+
+        <section className="panel terminal-box" aria-label="About me">
+          <div className="panel-heading"><div><span className="eyebrow">A FEW DETAILS</span><h2>About me</h2></div><span className="panel-index">02</span></div>
+          <div className="terminal"><div className="prompt"><span className="prompt-symbol">$</span> <span className="username">Melancholy</span>@about-me:~</div>
+            <div className="output">{visibleLines.map((line, i) => <div className="line" key={`${terminalIndex}-${i}`}>{line}{i === visibleLines.length - 1 && <span className="cursor">_</span>}</div>)}</div>
+          </div>
+          <div className="terminal-footer"><span>Omarchy · Fedora 44</span><span>HTML · CSS · Python · C</span></div>
+        </section>
+
+        <section className="panel spotify" aria-label="Recently played tracks">
+          <div className="panel-heading"><div><span className="eyebrow">LAST.FM</span><h2>Recently played</h2></div><span className="panel-index">03</span></div>
+          <div className="track-list">
+            {recentTracks.length ? recentTracks.map((track, i) => {
+              const image = track.image?.find((item) => item.size === 'extralarge')?.['#text'] || track.image?.find((item) => item.size === 'large')?.['#text']
+              const artist = typeof track.artist === 'string' ? track.artist : track.artist?.['#text']
+              return <div className="track-item" key={i}><img src={image || './milet.jpg'} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = './milet.jpg' }} alt="" /><div className="track-text"><div className="track-name">{track.name || 'Unknown Track'}</div><div className="track-artist">{artist || 'Unknown Artist'}</div></div></div>
+            }) : <div className="track-empty">Nothing scrobbled just now.</div>}
+          </div>
+        </section>
+      </div>
+
+      <section className="panel github-panel" aria-label="GitHub projects and activity">
+        <div className="panel-heading github-heading">
+          <div><span className="eyebrow">GITHUB</span><h2>Projects &amp; activity</h2></div>
+          <a className="github-profile-link" href="https://github.com/Melancholy-528" target="_blank" rel="noreferrer">View profile <span aria-hidden="true">↗</span></a>
+        </div>
+        <div className="contribution-block">
+          <div className="contribution-heading"><h3>Contribution graph</h3><span>past year</span><span className="contribution-mobile-note">scroll for full year →</span></div>
+          {contributionChartFailed ? <p className="github-empty">The contribution graph is unavailable right now.</p> : <div className="contribution-scroll"><img className="contribution-chart" src={contributionChartUrl} alt="GitHub contribution activity over the past year" onError={() => setContributionChartFailed(true)} /></div>}
+        </div>
+        <div className="github-columns">
+          <section className="github-section" aria-label="Recent projects">
+            <h3>Projects</h3>
+            <div className="project-list">
+              {repositories === null ? <p className="github-empty">Loading repositories…</p> : repositories.length ? repositories.map((repo) => <a className="project-row" href={repo.html_url} target="_blank" rel="noreferrer" key={repo.id}>
+                <div className="project-info"><div className="project-name">{repo.name}<span aria-hidden="true">↗</span></div>{repo.description && <p>{repo.description}</p>}</div>
+                <div className="project-meta">{repo.language && <span className="language-dot" />}{repo.language || 'Repository'}<time>{formatActivityDate(repo.updated_at)}</time></div>
+              </a>) : <p className="github-empty">{repositoriesFailed ? 'Couldn’t load public repositories.' : 'No public repositories yet.'}</p>}
+            </div>
+          </section>
+          <section className="github-section activity-section" aria-label="Recent public GitHub activity">
+            <h3>Recent activity</h3>
+            <div className="activity-list">
+              {githubEvents === null ? <p className="github-empty">Loading activity…</p> : githubEvents.length ? githubEvents.map((event) => <div className="activity-row" key={event.id}>
+                <span className="activity-mark" aria-hidden="true" />
+                <p>{eventLabel(event)} <a href={`https://github.com/${event.repo.name}`} target="_blank" rel="noreferrer">{event.repo.name.split('/').at(-1)}</a></p>
+                <time>{formatActivityDate(event.created_at)}</time>
+              </div>) : <p className="github-empty">{eventsFailed ? 'Couldn’t load recent activity.' : 'No recent public activity.'}</p>}
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+}
+
+function App() {
+  return window.location.pathname.endsWith('/favorites.html') ? <FavoritesPage /> : <HomePage />
+}
+
+export default App

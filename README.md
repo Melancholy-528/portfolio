@@ -1,6 +1,6 @@
-# Melancholy Profile
+#Portfolio
 
-A personal profile website built with React, TypeScript, and Vite. It includes a separate anime and manga favorites page.
+A personal portfolio website built with React, TypeScript, and Vite.
 
 ## Features
 
@@ -8,7 +8,7 @@ A personal profile website built with React, TypeScript, and Vite. It includes a
 - Public GitHub repositories, recent activity, and contribution graph.
 - Current anime and manga lists from AniList.
 - Favorite anime and manga carousels with AniList cover art.
-- Haryana weather from Open-Meteo.
+- weather from Open-Meteo.
 - Discord presence from Lanyard and recent tracks from Last.fm.
 
 The profile uses public APIs at runtime. Those sections need an internet connection and may be unavailable if an API is down or rate-limited.
@@ -35,8 +35,5 @@ The production site is written to `dist/`. Deploy the contents of that directory
 
 ## Personal settings
 
-The profile details and public service identifiers are in `src/App.tsx`. Update them to use your own accounts and location. The AniList current list requires a public profile. The weather widget uses coordinates for a regional estimate of Haryana.
-
-## License
-
+The profile details and public service identifiers are in `src/App.tsx`. Update them to use your own accounts and location. The AniList current list requires a public profile. The weather widget uses coordinates for a regional estimate.
 The project source code is available under the MIT License; see [LICENSE](LICENSE). The music and image files in `public/` and artwork loaded from AniList are not covered by that license. They remain subject to their respective owners' rights and terms.

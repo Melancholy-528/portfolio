@@ -377,7 +377,11 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
 
   return <main className={`app ${entered ? 'is-entered' : ''}`}>
     <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
-    {!entered && <div className="enter-screen"><button className="enter-button" onClick={() => setEntered(true)}>Click to enter <span aria-hidden="true">↗</span></button></div>}
+    {!entered && <div className="enter-screen">
+      <div className="enter-content">
+        <button className="enter-button" onClick={() => setEntered(true)}><span>Click to enter</span><span className="enter-icon" aria-hidden="true">⏎</span></button>
+      </div>
+    </div>}
     <div className="page-shell">
       <section className="profile-card" id="top">
         <div className="profile-copy">
@@ -399,15 +403,30 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
         </div>
       </section>
 
+      <div className="dashboard-grid">
+      <SpotifyNowCard />
+
+      <section className="panel terminal-box" aria-label="About me">
+        <div className="panel-heading"><div><span className="eyebrow">A FEW DETAILS</span><h2>About me</h2></div><span className="panel-index">02</span></div>
+        <div className="terminal"><div className="prompt"><span className="prompt-symbol">$</span> <span className="username">Melancholy</span>@about-me:~</div>
+          <div className="output">{visibleLines.map((line, i) => <div className="line" key={`${terminalIndex}-${i}`}>{line}{i === visibleLines.length - 1 && <span className="cursor">_</span>}</div>)}</div>
+        </div>
+        <div className="terminal-footer"><span>Omarchy · Fedora 44</span><span>HTML · CSS · Python · C</span></div>
+      </section>
+
       <section className="weather-strip" aria-label="Current weather in Haryana, India">
         <div className="weather-place"><span className="eyebrow">WEATHER · STATE ESTIMATE</span><h2>Haryana, India</h2></div>
         {weather ? <>
           <div className="weather-now"><span className="weather-symbol" aria-hidden="true">{weather.weather_code === 0 ? '☀' : [1, 2, 3].includes(weather.weather_code) ? '◒' : [95, 96, 99].includes(weather.weather_code) ? 'ϟ' : '☁'}</span><strong>{Math.round(weather.temperature_2m)}°</strong><span>{weatherDescription(weather.weather_code)}</span></div>
-          <div className="weather-detail"><span>Feels like</span><strong>{Math.round(weather.apparent_temperature)}°C</strong></div>
-          <div className="weather-detail"><span>Humidity</span><strong>{weather.relative_humidity_2m}%</strong></div>
-          <div className="weather-detail"><span>Wind</span><strong>{Math.round(weather.wind_speed_10m)} km/h</strong></div>
+          <div className="weather-footer">
+            <div className="weather-details">
+              <div className="weather-detail"><span>Feels like</span><strong>{Math.round(weather.apparent_temperature)}°C</strong></div>
+              <div className="weather-detail"><span>Humidity</span><strong>{weather.relative_humidity_2m}%</strong></div>
+              <div className="weather-detail"><span>Wind</span><strong>{Math.round(weather.wind_speed_10m)} km/h</strong></div>
+            </div>
+            <a className="weather-source" href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
+          </div>
         </> : <p className="weather-message">{weatherFailed ? 'Weather is unavailable right now.' : 'Loading current conditions…'}</p>}
-        <a className="weather-source" href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
       </section>
 
       <AniListNow username={aniListUsername} />
@@ -426,14 +445,6 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
           </div>
         </section>
 
-        <section className="panel terminal-box" aria-label="About me">
-          <div className="panel-heading"><div><span className="eyebrow">A FEW DETAILS</span><h2>About me</h2></div><span className="panel-index">02</span></div>
-          <div className="terminal"><div className="prompt"><span className="prompt-symbol">$</span> <span className="username">Melancholy</span>@about-me:~</div>
-            <div className="output">{visibleLines.map((line, i) => <div className="line" key={`${terminalIndex}-${i}`}>{line}{i === visibleLines.length - 1 && <span className="cursor">_</span>}</div>)}</div>
-          </div>
-          <div className="terminal-footer"><span>Omarchy · Fedora 44</span><span>HTML · CSS · Python · C</span></div>
-        </section>
-
         <section className="panel spotify" aria-label="Recently played tracks">
           <div className="panel-heading"><div><span className="eyebrow">LAST.FM</span><h2>Recently played</h2></div><span className="panel-index">03</span></div>
           <div className="track-list">
@@ -445,8 +456,6 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
           </div>
         </section>
       </div>
-
-      <SpotifyNowCard />
 
       <section className="panel github-panel" aria-label="GitHub projects and activity">
         <div className="panel-heading github-heading">
@@ -479,6 +488,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
           </section>
         </div>
       </section>
+      </div>
     </div>
   </main>
 }

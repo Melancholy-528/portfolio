@@ -165,6 +165,16 @@ function SpotifyNowCard() {
     return () => { controller.abort(); window.clearInterval(timer) }
   }, [])
 
+  useEffect(() => {
+    if (status !== 'playing') return
+    const timer = window.setInterval(() => {
+      setTrack((current) => current && current.durationMs > 0
+        ? { ...current, progressMs: Math.min(current.durationMs, current.progressMs + 1000) }
+        : current)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [status])
+
   const percent = track?.durationMs ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0
   const statusText = status === 'playing' ? 'PLAYING NOW' : status === 'idle' ? 'NOTHING PLAYING' : status === 'setup' ? 'SETUP REQUIRED' : status === 'reauthorize' ? 'RECONNECT REQUIRED' : status === 'error' ? 'UNAVAILABLE' : 'CHECKING SPOTIFY'
 

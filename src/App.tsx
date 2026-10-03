@@ -31,6 +31,7 @@ type FavoriteArt = { coverImage?: { extraLarge?: string; large?: string } }
 type AniListEntry = { status: string; progress?: number; notes?: string | null; media: { title: { userPreferred?: string; english?: string | null; romaji: string }; siteUrl: string; coverImage?: { extraLarge?: string | null; large?: string | null; medium?: string | null }; episodes?: number | null; chapters?: number | null } }
 type CurrentWeather = { temperature_2m: number; apparent_temperature: number; relative_humidity_2m: number; weather_code: number; wind_speed_10m: number }
 type RecentTrack = { name: string; artist: { '#text'?: string } | string; image?: { size: string; '#text': string }[] }
+type SpotifyNowPlaying = { isPlaying: true; title: string; artist: string; album: string; image: string; url: string; progressMs: number; durationMs: number }
 type GitHubRepository = { id: number; name: string; html_url: string; description: string | null; language: string | null; updated_at: string; fork: boolean; archived: boolean }
 type GitHubEvent = { id: string; type: string; created_at: string; repo: { name: string }; payload: { action?: string; ref_type?: string } }
 const contributionChartUrl = 'https://gh-heat.anishroy.com/api/Melancholy-528/svg?theme=green&darkMode=true&transparent=true&shape=square&cellSize=11&cellGap=3'
@@ -135,6 +136,55 @@ function AniListNow({ username }: { username: string }) {
   </section>
 }
 
+function formatTrackTime(milliseconds: number) {
+  const seconds = Math.floor(milliseconds / 1000)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+function SpotifyNowCard() {
+  const [track, setTrack] = useState<SpotifyNowPlaying | null>(null)
+  const [status, setStatus] = useState<'loading' | 'playing' | 'idle' | 'setup' | 'reauthorize' | 'error'>('loading')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const load = async () => {
+      try {
+        const response = await fetch('/api/spotify/currently-playing', { signal: controller.signal, cache: 'no-store' })
+        const result = await response.json()
+        if (result?.error === 'setup_required') { setTrack(null); setStatus('setup'); return }
+        if (result?.error === 'reauthorize') { setTrack(null); setStatus('reauthorize'); return }
+        if (!response.ok || result?.error) throw new Error('Spotify request failed')
+        if (result?.isPlaying && result.title) { setTrack(result as SpotifyNowPlaying); setStatus('playing') }
+        else { setTrack(null); setStatus('idle') }
+      } catch {
+        if (!controller.signal.aborted) { setTrack(null); setStatus('error') }
+      }
+    }
+    void load()
+    const timer = window.setInterval(() => { if (!controller.signal.aborted) void load() }, 30_000)
+    return () => { controller.abort(); window.clearInterval(timer) }
+  }, [])
+
+  const percent = track?.durationMs ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0
+  const statusText = status === 'playing' ? 'PLAYING NOW' : status === 'idle' ? 'NOTHING PLAYING' : status === 'setup' ? 'SETUP REQUIRED' : status === 'reauthorize' ? 'RECONNECT REQUIRED' : status === 'error' ? 'UNAVAILABLE' : 'CHECKING SPOTIFY'
+
+  return <section className="spotify-now-card" aria-label="Spotify currently playing">
+    <div className="spotify-now-heading">
+      <div><span className="eyebrow">SPOTIFY</span><h2>Now playing</h2></div>
+      <span className={`spotify-now-status ${status === 'playing' ? 'is-playing' : ''}`}><i aria-hidden="true" />{statusText}</span>
+    </div>
+    {track ? <div className="spotify-now-body">
+      {track.image ? <img className="spotify-now-art" src={track.image} alt={`${track.album} cover`} onError={() => setTrack((current) => current ? { ...current, image: '' } : null)} /> : <div className="spotify-now-art spotify-art-placeholder" aria-hidden="true">♪</div>}
+      <div className="spotify-now-details">
+        <a className="spotify-now-title" href={track.url || undefined} target="_blank" rel="noreferrer">{track.title}</a>
+        <p className="spotify-now-artist">{track.artist}{track.album ? ` · ${track.album}` : ''}</p>
+        <div className="spotify-progress-row"><span>{formatTrackTime(track.progressMs)}</span><div className="spotify-progress"><span style={{ width: `${percent}%` }} /></div><span>{formatTrackTime(track.durationMs)}</span></div>
+        <a className="spotify-listen-link" href={track.url || undefined} target="_blank" rel="noreferrer">Open in Spotify <span aria-hidden="true">↗</span></a>
+      </div>
+    </div> : <p className="spotify-now-message">{status === 'idle' ? 'Nothing is playing on Spotify right now.' : status === 'setup' ? 'Spotify setup is incomplete. See the README for the Vercel connection steps.' : status === 'reauthorize' ? 'The Spotify connection expired. Reauthorize the site owner’s account in Spotify.' : status === 'error' ? 'Spotify is unavailable right now.' : 'Checking playback…'}</p>}
+  </section>
+}
+
 function MediaCarousel({ title, kind, items }: { title: string; kind: MediaKind; items: Favorite[] }) {
   const carouselRef = useRef<HTMLDivElement>(null)
   const [art, setArt] = useState<Record<string, string>>({})
@@ -184,11 +234,11 @@ function MediaCarousel({ title, kind, items }: { title: string; kind: MediaKind;
   </section>
 }
 
-function FavoritesPage() {
+function FavoritesPage({ onHome }: { onHome: () => void }) {
   return <main className="app is-entered">
     <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
     <div className="page-shell favorites-shell">
-      <a className="back-link" href="./"><span aria-hidden="true">←</span> Back to home</a>
+      <a className="back-link" href="./" onClick={(event) => { event.preventDefault(); onHome() }}><span aria-hidden="true">←</span> Back to home</a>
       <header className="favorites-header">
         <span className="eyebrow">A PERSONAL LIST</span>
         <h1>Favorites</h1>
@@ -203,7 +253,7 @@ function FavoritesPage() {
   </main>
 }
 
-function HomePage() {
+function HomePage({ onFavorites }: { onFavorites: () => void }) {
   const [entered, setEntered] = useState(false)
   const [profile, setProfile] = useState<{ name: string; avatar: string; decoration?: string; status: string }>()
   const [recentTracks, setRecentTracks] = useState<RecentTrack[]>([])
@@ -329,7 +379,7 @@ function HomePage() {
             <a href="https://www.instagram.com/chillin_in_the_back_room/" target="_blank" rel="noreferrer">Instagram <span aria-hidden="true">↗</span></a>
             <a href="https://github.com/Melancholy-528" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
           </nav>
-          <a className="favorites-cta" href="./favorites.html">Anime &amp; manga favorites <span aria-hidden="true">↗</span></a>
+          <a className="favorites-cta" href="./favorites.html" onClick={(event) => { event.preventDefault(); onFavorites() }}>Anime &amp; manga favorites <span aria-hidden="true">↗</span></a>
         </div>
         <div className="profile-art">
           <div className="avatar-wrap">
@@ -386,6 +436,8 @@ function HomePage() {
         </section>
       </div>
 
+      <SpotifyNowCard />
+
       <section className="panel github-panel" aria-label="GitHub projects and activity">
         <div className="panel-heading github-heading">
           <div><span className="eyebrow">GITHUB</span><h2>Projects &amp; activity</h2></div>
@@ -421,8 +473,37 @@ function HomePage() {
   </main>
 }
 
+type AppPage = 'home' | 'favorites'
+const pageFromPath = (pathname: string): AppPage => pathname.endsWith('/favorites.html') ? 'favorites' : 'home'
+
 function App() {
-  return window.location.pathname.endsWith('/favorites.html') ? <FavoritesPage /> : <HomePage />
+  const initialPage = pageFromPath(window.location.pathname)
+  const [page, setPage] = useState<AppPage>(initialPage)
+  const [homeMounted, setHomeMounted] = useState(initialPage === 'home')
+  const [favoritesMounted, setFavoritesMounted] = useState(initialPage === 'favorites')
+
+  const showPage = (nextPage: AppPage) => {
+    setPage(nextPage)
+    if (nextPage === 'home') setHomeMounted(true)
+    else setFavoritesMounted(true)
+  }
+
+  const navigate = (path: string) => {
+    const url = new URL(path, window.location.href)
+    window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    showPage(pageFromPath(url.pathname))
+  }
+
+  useEffect(() => {
+    const onPopState = () => showPage(pageFromPath(window.location.pathname))
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  return <>
+    {homeMounted && <div hidden={page !== 'home'}><HomePage onFavorites={() => navigate('./favorites.html')} /></div>}
+    {favoritesMounted && <div hidden={page !== 'favorites'}><FavoritesPage onHome={() => navigate('./')} /></div>}
+  </>
 }
 
 export default App

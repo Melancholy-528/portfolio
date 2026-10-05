@@ -176,7 +176,7 @@ function AgeIndicator() {
 
 function VisitorCounter() {
   const [count, setCount] = useState<number | null>(null)
-  const [unavailable, setUnavailable] = useState(false)
+  const [counterError, setCounterError] = useState<'setup' | 'offline' | null>(null)
 
   useEffect(() => {
     const sessionKey = 'melancholy-portfolio-visitor-count'
@@ -187,17 +187,21 @@ function VisitorCounter() {
       return
     }
     fetch('/api/visitors')
-      .then((response) => { if (!response.ok) throw new Error('Visitor counter unavailable'); return response.json() as Promise<{ count: number }> })
+      .then(async (response) => {
+        const data = await response.json() as { count?: number; error?: string }
+        if (!response.ok) throw new Error(data.error || 'counter_unavailable')
+        return data
+      })
       .then(({ count: total }) => {
-        if (!Number.isFinite(total)) throw new Error('Visitor count unavailable')
+        if (typeof total !== 'number' || !Number.isFinite(total)) throw new Error('Visitor count unavailable')
         try { window.sessionStorage.setItem(sessionKey, String(total)) } catch { /* The displayed count still works without session storage. */ }
         setCount(total)
       })
-      .catch(() => setUnavailable(true))
+      .catch((reason: unknown) => setCounterError(reason instanceof Error && reason.message === 'counter_not_configured' ? 'setup' : 'offline'))
   }, [])
 
   return <div className="visitor-counter" aria-live="polite">
-    <span>VISITORS</span><strong>{count === null ? (unavailable ? 'Unavailable' : '…') : count.toLocaleString('en-IN')}</strong>
+    <span>VISITORS</span><strong title={counterError === 'setup' ? 'Add the Upstash Redis environment variables in Vercel, then redeploy.' : undefined}>{count === null ? (counterError === 'setup' ? 'Setup needed' : counterError ? 'Offline' : '…') : count.toLocaleString('en-IN')}</strong>
   </div>
 }
 

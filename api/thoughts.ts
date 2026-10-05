@@ -1,7 +1,10 @@
 type Thought = { id: string; name: string; message: string; createdAt: string }
-const env = (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+function environment() {
+  return (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+}
 
 async function redis(command: unknown[][]) {
+  const env = environment()
   const url = env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, '')
   const token = env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) throw new Error('storage_not_configured')
@@ -17,6 +20,7 @@ async function redis(command: unknown[][]) {
 }
 
 export async function GET() {
+  const env = environment()
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
     return Response.json({ error: 'storage_not_configured' }, { status: 503 })
   }
@@ -32,6 +36,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const env = environment()
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
     return Response.json({ error: 'storage_not_configured' }, { status: 503 })
   }

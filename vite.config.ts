@@ -4,6 +4,7 @@ import type { Plugin } from 'vite'
 import { GET as getGitHubData } from './api/github'
 import { GET as getVisitorCount } from './api/visitors'
 import { GET as getThoughts, POST as postThought } from './api/thoughts'
+import { GET as getApiStatus } from './api/status'
 
 let localVisitorCount = 0
 let localThoughts: { id: string; name: string; message: string; createdAt: string }[] = []
@@ -84,6 +85,18 @@ const githubApiDevRoute: Plugin = {
             sendJson(200, { thoughts: localThoughts, localOnly: true })
           } catch { sendJson(400, { error: 'invalid_request' }) }
         }).catch(() => sendJson(502, { error: 'guestbook_unavailable' }))
+      })
+    })
+    server.middlewares.use('/api/status', (request, response, next) => {
+      if ((request as typeof request & { method?: string }).method !== 'GET') return next()
+      void getApiStatus().then(async (result) => {
+        response.statusCode = result.status
+        result.headers.forEach((value: string, name: string) => response.setHeader(name, value))
+        response.end(await result.text())
+      }).catch(() => {
+        response.statusCode = 502
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.end(JSON.stringify({ storage: 'connection_failed' }))
       })
     })
   },

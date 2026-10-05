@@ -1,8 +1,11 @@
-const environment = (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+function environment() {
+  return (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+}
 
 export async function GET() {
-  const url = environment.UPSTASH_REDIS_REST_URL?.replace(/\/$/, '')
-  const token = environment.UPSTASH_REDIS_REST_TOKEN
+  const env = environment()
+  const url = env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, '')
+  const token = env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return Response.json({ error: 'counter_not_configured' }, { status: 503 })
 
   try {

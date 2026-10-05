@@ -313,25 +313,23 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
       }).catch(() => undefined)
     fetch('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=melancholy55838&api_key=ad45b0df4ea54c0597c6c74d60b79119&format=json&limit=10', { signal: controller.signal })
       .then((res) => res.json()).then((result) => setRecentTracks(result?.recenttracks?.track?.slice(0, 10) ?? [])).catch(() => undefined)
-    const repositoriesRequest = fetch('https://api.github.com/users/Melancholy-528/repos?sort=updated&per_page=100', { signal: controller.signal })
-      .then((res) => { if (!res.ok) throw new Error('GitHub request failed'); return res.json() as Promise<GitHubRepository[]> })
-    const portfolioRequest = fetch('https://api.github.com/repos/Melancholy-528/my-portfolio', { signal: controller.signal })
-      .then((res) => res.ok ? res.json() as Promise<GitHubRepository> : null)
-      .catch(() => null)
-    Promise.all([repositoriesRequest, portfolioRequest])
-      .then(([repos, portfolio]) => {
-        const eligible = repos.filter((repo) => !repo.fork && !repo.archived && !repo.name.toLowerCase().includes('twitter-sentiment-analysis'))
-        const featuredPortfolio = portfolio || eligible.find((repo) => repo.name.toLowerCase() === 'my-portfolio')
-        const selected = featuredPortfolio
-          ? [featuredPortfolio, ...eligible.filter((repo) => repo.id !== featuredPortfolio.id)]
-          : eligible
-        if (!controller.signal.aborted) setRepositories(selected.slice(0, 3))
+    const applyRepositories = (repos: GitHubRepository[]) => {
+      const eligible = repos.filter((repo) => !repo.fork && !repo.archived && !repo.name.toLowerCase().includes('twitter-sentiment-analysis'))
+      const featuredPortfolio = eligible.find((repo) => repo.name.toLowerCase() === 'my-portfolio')
+      const selected = featuredPortfolio ? [featuredPortfolio, ...eligible.filter((repo) => repo.id !== featuredPortfolio.id)] : eligible
+      setRepositories(selected.slice(0, 3))
+    }
+    const applyEvents = (events: GitHubEvent[]) => setGithubEvents(events
+      .filter((event) => ['PushEvent', 'CreateEvent', 'WatchEvent', 'ForkEvent', 'IssuesEvent', 'PullRequestEvent', 'ReleaseEvent', 'PublicEvent'].includes(event.type))
+      .slice(0, 6))
+    fetch('/api/github', { signal: controller.signal })
+      .then((res) => { if (!res.ok) throw new Error('GitHub data request failed'); return res.json() as Promise<{ repositories: GitHubRepository[]; events: GitHubEvent[]; repositoriesFailed: boolean; eventsFailed: boolean }> })
+      .then((data) => {
+        if (controller.signal.aborted) return
+        if (data.repositoriesFailed) { setRepositories([]); setRepositoriesFailed(true) } else applyRepositories(data.repositories)
+        if (data.eventsFailed) { setGithubEvents([]); setEventsFailed(true) } else applyEvents(data.events)
       })
-      .catch(() => { if (!controller.signal.aborted) { setRepositories([]); setRepositoriesFailed(true) } })
-    fetch('https://api.github.com/users/Melancholy-528/events/public?per_page=30', { signal: controller.signal })
-      .then((res) => { if (!res.ok) throw new Error('GitHub request failed'); return res.json() })
-      .then((events: GitHubEvent[]) => setGithubEvents(events.filter((event) => ['PushEvent', 'CreateEvent', 'WatchEvent', 'ForkEvent', 'IssuesEvent', 'PullRequestEvent', 'ReleaseEvent', 'PublicEvent'].includes(event.type)).slice(0, 6)))
-      .catch(() => { if (!controller.signal.aborted) { setGithubEvents([]); setEventsFailed(true) } })
+      .catch(() => { if (!controller.signal.aborted) { setRepositories([]); setGithubEvents([]); setRepositoriesFailed(true); setEventsFailed(true) } })
     const loadWeather = () => fetch('https://api.open-meteo.com/v1/forecast?latitude=29.0588&longitude=76.0856&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=Asia%2FKolkata', { signal: controller.signal })
       .then((res) => { if (!res.ok) throw new Error('Weather request failed'); return res.json() })
       .then((result) => setWeather(result?.current ?? null))

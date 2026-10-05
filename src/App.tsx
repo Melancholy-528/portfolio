@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { flushSync } from 'react-dom'
 
 const playlist = [
   { title: 'Anytime Anywhere', image: './milet.jpg', audio: './[028] Milet ~ Anytime Anywhere _ Lyrics RomEng [(Onion Subs)].m4a' },
@@ -149,10 +150,136 @@ function LocalClock() {
     return () => window.clearInterval(timer)
   }, [])
 
-  const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(now)
+  const time = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(now)
 
   return <div className="local-clock">
     <time dateTime={now.toISOString()} aria-label={`Local time ${time}`}>{time}</time>
+  </div>
+}
+
+const birthTimestamp = Date.parse('2006-05-28T13:06:00+05:30')
+const yearMilliseconds = 365.2425 * 24 * 60 * 60 * 1000
+
+function AgeIndicator() {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const years = ((now - birthTimestamp) / yearMilliseconds).toFixed(8)
+  return <div className="age-indicator profile-age" aria-label={`Age ${years} years`}>
+    <span>AGE</span><strong>{years}y</strong>
+  </div>
+}
+
+function VisitorCounter() {
+  const [count, setCount] = useState<number | null>(null)
+  const [unavailable, setUnavailable] = useState(false)
+
+  useEffect(() => {
+    const sessionKey = 'melancholy-portfolio-visitor-count'
+    let cachedCount: string | null = null
+    try { cachedCount = window.sessionStorage.getItem(sessionKey) } catch { /* Storage may be disabled by the browser. */ }
+    if (cachedCount && Number.isFinite(Number(cachedCount))) {
+      setCount(Number(cachedCount))
+      return
+    }
+    fetch('/api/visitors')
+      .then((response) => { if (!response.ok) throw new Error('Visitor counter unavailable'); return response.json() as Promise<{ count: number }> })
+      .then(({ count: total }) => {
+        if (!Number.isFinite(total)) throw new Error('Visitor count unavailable')
+        try { window.sessionStorage.setItem(sessionKey, String(total)) } catch { /* The displayed count still works without session storage. */ }
+        setCount(total)
+      })
+      .catch(() => setUnavailable(true))
+  }, [])
+
+  return <div className="visitor-counter" aria-live="polite">
+    <span>VISITORS</span><strong>{count === null ? (unavailable ? 'Unavailable' : '…') : count.toLocaleString('en-IN')}</strong>
+  </div>
+}
+
+function SiteFooter({ onThoughts, showThoughtLink = true }: { onThoughts?: () => void; showThoughtLink?: boolean }) {
+  return <footer className="site-footer">
+    {showThoughtLink && <a href="./thoughts.html" onClick={(event) => { if (!onThoughts) return; event.preventDefault(); onThoughts() }}>Guestbook <span aria-hidden="true">↗</span></a>}
+    <VisitorCounter />
+  </footer>
+}
+
+type GuestThought = { id: string; name: string; message: string; createdAt: string }
+
+function ThoughtsGuestbook() {
+  const [thoughts, setThoughts] = useState<GuestThought[]>([])
+  const [name, setName] = useState('')
+  const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [storageUnavailable, setStorageUnavailable] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const loadThoughts = () => fetch('/api/thoughts', { signal: controller.signal })
+      .then(async (response) => {
+        const data = await response.json() as { thoughts?: GuestThought[]; error?: string }
+        if (!response.ok) throw new Error(data.error || 'guestbook_unavailable')
+        setThoughts(data.thoughts || [])
+        setLoading(false)
+        setStorageUnavailable(false)
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        const message = reason instanceof Error ? reason.message : ''
+        setStorageUnavailable(message === 'storage_not_configured')
+        setError(message === 'storage_not_configured' ? 'Shared thoughts storage needs to be configured.' : 'Could not sync thoughts right now.')
+        setLoading(false)
+      })
+    void loadThoughts()
+    const refresh = window.setInterval(() => { void loadThoughts() }, 15_000)
+    return () => { controller.abort(); window.clearInterval(refresh) }
+  }, [])
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (sending) return
+    setSending(true)
+    setError('')
+    try {
+      const response = await fetch('/api/thoughts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, message }),
+      })
+      const data = await response.json() as { thoughts?: GuestThought[]; error?: string }
+      if (!response.ok) throw new Error(data.error || 'guestbook_unavailable')
+      setThoughts(data.thoughts || [])
+      setMessage('')
+      setError('Your thought is posted.')
+    } catch (reason) {
+      const cause = reason instanceof Error ? reason.message : ''
+      setStorageUnavailable(cause === 'storage_not_configured')
+      setError(cause === 'storage_not_configured' ? 'Shared thoughts storage needs to be configured.' : 'Could not post your thought. Please try again.')
+    } finally { setSending(false) }
+  }
+
+  return <div className="thoughts-content">
+    <form className="thought-form" onSubmit={submit}>
+      <label htmlFor="thought-name">Name</label>
+      <input id="thought-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={40} required placeholder="What should we call you?" />
+      <label htmlFor="thought-message">Your thought</label>
+      <textarea id="thought-message" value={message} onChange={(event) => setMessage(event.target.value)} maxLength={600} rows={4} required placeholder="Leave a note, a recommendation, or say hello…" />
+      <div className="thought-form-footer"><span>{message.length}/600</span><button type="submit" disabled={sending || storageUnavailable}>{sending ? 'Posting…' : 'Post thought'}</button></div>
+      {error && <p className={`thought-form-status ${storageUnavailable ? 'is-error' : ''}`} role="status">{error}</p>}
+    </form>
+    <div className="thought-list" aria-live="polite">
+      <div className="thought-list-heading"><h3>Recent thoughts</h3><span>{thoughts.length.toString().padStart(2, '0')}</span></div>
+      {loading ? <p className="thought-empty">Loading thoughts…</p> : thoughts.length ? thoughts.map((thought) => <article className="thought-entry" key={thought.id}>
+        <div className="thought-entry-heading"><strong>{thought.name}</strong><time dateTime={thought.createdAt}>{new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(thought.createdAt))}</time></div>
+        <p>{thought.message}</p>
+      </article>) : <p className="thought-empty">{storageUnavailable ? 'Entries will appear here once shared storage is connected.' : 'No thoughts yet. You can start the conversation.'}</p>}
+    </div>
   </div>
 }
 
@@ -259,7 +386,7 @@ function MediaCarousel({ title, kind, items }: { title: string; kind: MediaKind;
   </section>
 }
 
-function FavoritesPage({ onHome }: { onHome: () => void }) {
+function FavoritesPage({ onHome, onThoughts }: { onHome: () => void; onThoughts: () => void }) {
   return <main className="app is-entered">
     <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
     <div className="page-shell favorites-shell">
@@ -274,12 +401,32 @@ function FavoritesPage({ onHome }: { onHome: () => void }) {
         <MediaCarousel title="Manga" kind="MANGA" items={mangaFavorites} />
       </div>
       <p className="favorites-credit">Cover images from <a href="https://anilist.co/" target="_blank" rel="noreferrer">AniList</a>.</p>
+      <SiteFooter onThoughts={onThoughts} />
     </div>
   </main>
 }
 
-function HomePage({ onFavorites }: { onFavorites: () => void }) {
-  const [entered, setEntered] = useState(false)
+function ThoughtsPage({ onHome }: { onHome: () => void }) {
+  return <main className="app is-entered">
+    <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
+    <div className="page-shell thoughts-shell">
+      <a className="back-link" href="./" onClick={(event) => { event.preventDefault(); onHome() }}><span aria-hidden="true">←</span> Back to home</a>
+      <header className="thoughts-header">
+        <span className="eyebrow">GUESTBOOK</span>
+        <h1>Thoughts</h1>
+        <p>A place for notes, recommendations, and passing thoughts. New posts appear here for everyone.</p>
+      </header>
+      <section className="panel thoughts-panel" aria-label="Guestbook comments">
+        <div className="panel-heading"><div><span className="eyebrow">OPEN THREAD</span><h2>What’s on your mind?</h2></div><span className="panel-index">01</span></div>
+        <ThoughtsGuestbook />
+      </section>
+      <SiteFooter showThoughtLink={false} />
+    </div>
+  </main>
+}
+
+function HomePage({ onFavorites, onThoughts, startEntered = false }: { onFavorites: () => void; onThoughts: () => void; startEntered?: boolean }) {
+  const [entered, setEntered] = useState(startEntered)
   const [profile, setProfile] = useState<{ name: string; avatar: string; decoration?: string; status: string }>()
   const [recentTracks, setRecentTracks] = useState<RecentTrack[]>([])
   const [repositories, setRepositories] = useState<GitHubRepository[] | null>(null)
@@ -415,13 +562,17 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
             <a href="https://www.instagram.com/chillin_in_the_back_room/" target="_blank" rel="noreferrer">Instagram <span aria-hidden="true">↗</span></a>
             <a href="https://github.com/Melancholy-528" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
           </nav>
-          <a className="favorites-cta" href="./favorites.html" onClick={(event) => { event.preventDefault(); onFavorites() }}>Anime &amp; manga favorites <span aria-hidden="true">↗</span></a>
+          <div className="profile-actions">
+            <a className="favorites-cta" href="./favorites.html" onClick={(event) => { event.preventDefault(); onFavorites() }}>Anime &amp; manga favorites <span aria-hidden="true">↗</span></a>
+            <a className="thoughts-cta" href="./thoughts.html" onClick={(event) => { event.preventDefault(); onThoughts() }}>Guestbook <span aria-hidden="true">↗</span></a>
+          </div>
         </div>
         <div className="profile-art">
           <div className="avatar-wrap">
             {profile ? <img className="aboutme-img" src={profile.avatar} alt="Discord avatar" /> : <div className="avatar-placeholder">M</div>}
             {profile?.decoration && <img className="avatar-decoration" src={profile.decoration} alt="" />}
           </div>
+          <AgeIndicator />
         </div>
       </section>
 
@@ -511,40 +662,57 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
         </div>
       </section>
       </div>
+      <SiteFooter onThoughts={onThoughts} />
     </div>
   </main>
 }
 
-type AppPage = 'home' | 'favorites'
-const pageFromPath = (pathname: string): AppPage => pathname.endsWith('/favorites.html') ? 'favorites' : 'home'
+type AppPage = 'home' | 'favorites' | 'thoughts'
+const pageFromPath = (pathname: string): AppPage => pathname.endsWith('/favorites.html') ? 'favorites' : pathname.endsWith('/thoughts.html') ? 'thoughts' : 'home'
 
 function App() {
   const initialPage = pageFromPath(window.location.pathname)
   const [page, setPage] = useState<AppPage>(initialPage)
   const [homeMounted, setHomeMounted] = useState(initialPage === 'home')
+  const [homeStartsEntered, setHomeStartsEntered] = useState(false)
   const [favoritesMounted, setFavoritesMounted] = useState(initialPage === 'favorites')
+  const [thoughtsMounted, setThoughtsMounted] = useState(initialPage === 'thoughts')
 
   const showPage = (nextPage: AppPage) => {
     setPage(nextPage)
-    if (nextPage === 'home') setHomeMounted(true)
-    else setFavoritesMounted(true)
+    if (nextPage === 'home') {
+      if (!homeMounted) setHomeStartsEntered(true)
+      setHomeMounted(true)
+    }
+    else if (nextPage === 'favorites') setFavoritesMounted(true)
+    else setThoughtsMounted(true)
+  }
+
+  const transitionPage = (update: () => void) => {
+    const transitionDocument = document as Document & { startViewTransition?: (callback: () => void) => unknown }
+    if (transitionDocument.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      transitionDocument.startViewTransition(() => flushSync(update))
+    } else update()
   }
 
   const navigate = (path: string) => {
     const url = new URL(path, window.location.href)
-    window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`)
-    showPage(pageFromPath(url.pathname))
+    transitionPage(() => {
+      window.history.pushState({ portfolioPage: true }, '', `${url.pathname}${url.search}${url.hash}`)
+      showPage(pageFromPath(url.pathname))
+    })
   }
 
   useEffect(() => {
-    const onPopState = () => showPage(pageFromPath(window.location.pathname))
+    const onPopState = () => transitionPage(() => showPage(pageFromPath(window.location.pathname)))
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
   return <>
-    {homeMounted && <div hidden={page !== 'home'}><HomePage onFavorites={() => navigate('./favorites.html')} /></div>}
-    {favoritesMounted && <div hidden={page !== 'favorites'}><FavoritesPage onHome={() => navigate('./')} /></div>}
+    {homeMounted && <div className={`page-route ${page === 'home' ? 'is-current' : ''}`} hidden={page !== 'home'}><HomePage startEntered={homeStartsEntered} onFavorites={() => navigate('./favorites.html')} onThoughts={() => navigate('./thoughts.html')} /></div>}
+    {favoritesMounted && <div className={`page-route ${page === 'favorites' ? 'is-current' : ''}`} hidden={page !== 'favorites'}><FavoritesPage onHome={() => navigate('./')} onThoughts={() => navigate('./thoughts.html')} /></div>}
+    {thoughtsMounted && <div hidden={page !== 'thoughts'}><ThoughtsPage onHome={() => navigate('./')} /></div>}
   </>
 }
 

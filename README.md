@@ -11,6 +11,7 @@ A personal portfolio website built with React, TypeScript, and Vite.
 - Haryana weather from Open-Meteo.
 - Spotify currently playing track, when configured on Vercel.
 - Discord presence from Lanyard and recent tracks from Last.fm.
+- A shared guestbook and visitor counter backed by Upstash Redis.
 
 The profile uses public APIs at runtime. Those sections need an internet connection and may be unavailable if an API is down or rate-limited.
 
@@ -32,7 +33,15 @@ npm run build
 npm run preview
 ```
 
-The production site is written to `dist/`. Both `index.html` and `favorites.html` are built as separate pages. Deploy to Vercel to run the Spotify API functions in `api/`; a static-only host will not provide those endpoints.
+The production site is written to `dist/`. `index.html`, `favorites.html`, and `thoughts.html` are built as separate pages. Deploy to Vercel to run the API functions in `api/`; a static-only host will not provide those endpoints.
+
+## Guestbook and visitor count
+
+The guestbook stores up to 50 recent entries and refreshes them every 15 seconds. The visitor counter increments once per browser session. Both share data through Upstash Redis; local development falls back to in-memory data until Redis is configured.
+
+1. Create an Upstash Redis database and copy its REST URL and token.
+2. Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to the Vercel project environment variables, then redeploy.
+3. For local development, copy `.env.example` to `.env.local` and add the same values. Without them, the local guestbook and visitor count are temporary and only exist in the running Vite process.
 
 ## Spotify setup on Vercel
 

@@ -81,6 +81,7 @@ a { color: inherit; }
 
 .content-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) minmax(0, 1.08fr); align-items: stretch; gap: 18px; }
 .dashboard-grid { display: grid; gap: var(--card-gap); }
+.dashboard-grid > *, .dashboard-grid > .content-grid > * { min-width: 0; }
 .dashboard-grid > .spotify-now-card,
 .dashboard-grid > .terminal-box,
 .dashboard-grid > .weather-strip,
@@ -311,7 +312,7 @@ a { color: inherit; }
   .weather-details, .weather-source { grid-column: 1 / -1; }
   .weather-source { justify-self: end; }
 }
-@media (max-width: 620px) {
+@media (max-width: 700px) {
   .app { padding-right: 15px; padding-left: 15px; }
   .page-shell { margin-top: 22px; }
   .profile-card { grid-template-columns: 1fr; gap: 22px; min-height: 0; padding: 25px 22px; }
@@ -345,7 +346,9 @@ a { color: inherit; }
   .github-columns { grid-template-columns: 1fr; gap: 15px; }
   .activity-section { padding: 15px 0 0; border-top: 1px solid var(--border); border-left: 0; }
   .activity-list { max-height: 280px; }
-  .project-row { gap: 10px; }
+  .project-row { flex-wrap: wrap; gap: 10px; }
+  .project-info { flex: 1 1 100%; }
+  .project-meta { flex-wrap: wrap; }
   .project-meta { font-size: 9px; }
   .favorites-shell { margin-top: 26px; }
   .back-link { margin-bottom: 28px; }

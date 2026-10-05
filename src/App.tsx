@@ -130,7 +130,7 @@ function AniListNow({ username }: { username: string }) {
     })}</ul> : <p className="current-empty">Nothing marked current.</p>}
   </div>
 
-  return <section className="current-panel" aria-label="Currently watching and reading on AniList">
+  return <section className="current-panel" id="anime" aria-label="Currently watching and reading on AniList">
     <div className="current-panel-heading"><h2>Currently into</h2></div>
     {failed ? <p className="current-empty">Couldn’t load this public AniList list.</p> : entries ? <div className="current-groups">{group('ANIME', entries.anime)}{group('MANGA', entries.manga)}</div> : <p className="current-empty">Loading your current list…</p>}
   </section>
@@ -139,6 +139,21 @@ function AniListNow({ username }: { username: string }) {
 function formatTrackTime(milliseconds: number) {
   const seconds = Math.floor(milliseconds / 1000)
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+function LocalClock() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(now)
+
+  return <div className="local-clock">
+    <time dateTime={now.toISOString()} aria-label={`Local time ${time}`}>{time}</time>
+  </div>
 }
 
 function SpotifyNowCard() {
@@ -178,7 +193,7 @@ function SpotifyNowCard() {
   const percent = track?.durationMs ? Math.min(100, Math.round((track.progressMs / track.durationMs) * 100)) : 0
   const statusText = status === 'playing' ? 'PLAYING NOW' : status === 'idle' ? 'NOTHING PLAYING' : status === 'setup' ? 'SETUP REQUIRED' : status === 'reauthorize' ? 'RECONNECT REQUIRED' : status === 'error' ? 'UNAVAILABLE' : 'CHECKING SPOTIFY'
 
-  return <section className="spotify-now-card" aria-label="Spotify currently playing">
+  return <section className="spotify-now-card" id="spotify-now" aria-label="Spotify currently playing">
     <div className="spotify-now-heading">
       <div><span className="eyebrow">SPOTIFY</span><h2>Now playing</h2></div>
       <span className={`spotify-now-status ${status === 'playing' ? 'is-playing' : ''}`}><i aria-hidden="true" />{statusText}</span>
@@ -284,7 +299,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('https://api.lanyard.rest/v1/users/792370349652049960', { signal: controller.signal })
+    fetch('https://api.lanyard.rest/v1/users/524169169667883008', { signal: controller.signal })
       .then((res) => res.json()).then((result) => {
         const user = result?.data?.discord_user
         if (!user) return
@@ -292,7 +307,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
         setProfile({
           name: user.global_name || user.username || 'Melancholy',
           avatar: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${format}?size=240`,
-          decoration: user.avatar_decoration_data?.asset ? `https://cdn.discordapp.com/avatar-decoration-presets/${user.avatar_decoration_data.asset}.webp?size=240` : undefined,
+          decoration: user.avatar_decoration_data?.asset ? `https://cdn.discordapp.com/avatar-decoration-presets/${user.avatar_decoration_data.asset}.png?size=240` : undefined,
           status: result.data.discord_status || 'offline',
         })
       }).catch(() => undefined)
@@ -376,20 +391,29 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
   const selected = playlist[currentTrack]
 
   return <main className={`app ${entered ? 'is-entered' : ''}`}>
-    <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
     {!entered && <div className="enter-screen">
       <div className="enter-content">
         <button className="enter-button" onClick={() => setEntered(true)}><span>Click to enter</span><span className="enter-icon" aria-hidden="true">⏎</span></button>
       </div>
     </div>}
     <div className="page-shell">
+      <div className="night-sky" aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span className="meteor" key={i} />)}</div>
+      <div className="topbar">
+        <nav className="section-nav" aria-label="Page sections">
+          <a href="#about">About</a>
+          <a href="#anime">Manga/anime</a>
+          <a href="#music">Listening to</a>
+          <a href="#github">GitHub</a>
+        </nav>
+        <LocalClock />
+      </div>
       <section className="profile-card" id="top">
         <div className="profile-copy">
           <div className="eyebrow"><span className={`status-indicator ${profile?.status || 'offline'}`} />{profile?.status === 'online' ? 'around right now' : profile?.status === 'idle' ? 'away for a bit' : profile?.status === 'dnd' ? 'keeping quiet' : profile ? 'not around right now' : 'discord status unavailable'}</div>
           <h1>Hey, I’m <span>{profile?.name || 'Melancholy'}</span>.</h1>
           <p className="profile-description">Anime enthusiast, CS student, and your average guy.</p>
           <nav className="social-links" aria-label="Social links">
-            <a href="https://discordapp.com/users/792370349652049960" target="_blank" rel="noreferrer">Discord <span aria-hidden="true">↗</span></a>
+            <a href="https://discordapp.com/users/524169169667883008" target="_blank" rel="noreferrer">Discord <span aria-hidden="true">↗</span></a>
             <a href="https://www.instagram.com/chillin_in_the_back_room/" target="_blank" rel="noreferrer">Instagram <span aria-hidden="true">↗</span></a>
             <a href="https://github.com/Melancholy-528" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
           </nav>
@@ -406,7 +430,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
       <div className="dashboard-grid">
       <SpotifyNowCard />
 
-      <section className="panel terminal-box" aria-label="About me">
+      <section className="panel terminal-box" id="about" aria-label="About me">
         <div className="panel-heading"><div><span className="eyebrow">A FEW DETAILS</span><h2>About me</h2></div><span className="panel-index">02</span></div>
         <div className="terminal"><div className="prompt"><span className="prompt-symbol">$</span> <span className="username">Melancholy</span>@about-me:~</div>
           <div className="output">{visibleLines.map((line, i) => <div className="line" key={`${terminalIndex}-${i}`}>{line}{i === visibleLines.length - 1 && <span className="cursor">_</span>}</div>)}</div>
@@ -414,7 +438,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
         <div className="terminal-footer"><span>Omarchy · Fedora 44</span><span>HTML · CSS · Python · C</span></div>
       </section>
 
-      <section className="weather-strip" aria-label="Current weather in Haryana, India">
+      <section className="weather-strip" id="weather" aria-label="Current weather in Haryana, India">
         <div className="weather-place"><span className="eyebrow">WEATHER · STATE ESTIMATE</span><h2>Haryana, India</h2></div>
         {weather ? <>
           <div className="weather-now"><span className="weather-symbol" aria-hidden="true">{weather.weather_code === 0 ? '☀' : [1, 2, 3].includes(weather.weather_code) ? '◒' : [95, 96, 99].includes(weather.weather_code) ? 'ϟ' : '☁'}</span><strong>{Math.round(weather.temperature_2m)}°</strong><span>{weatherDescription(weather.weather_code)}</span></div>
@@ -432,7 +456,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
       <AniListNow username={aniListUsername} />
 
       <div className="content-grid">
-        <section className="panel music" aria-label="Music player">
+        <section className="panel music" id="music" aria-label="Music player">
           <div className="panel-heading"><div><span className="eyebrow">ON REPEAT</span><h2>Listening to</h2></div><span className="panel-index">01</span></div>
           <img src={selected.image} alt={`${selected.title} cover`} className="song-img" />
           <div className="song-meta"><h3>{selected.title}</h3><span>{currentTrack === 0 ? 'milet' : 'Yorushika'}</span></div>
@@ -445,7 +469,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
           </div>
         </section>
 
-        <section className="panel spotify" aria-label="Recently played tracks">
+        <section className="panel spotify" id="lastfm" aria-label="Recently played tracks">
           <div className="panel-heading"><div><span className="eyebrow">LAST.FM</span><h2>Recently played</h2></div><span className="panel-index">03</span></div>
           <div className="track-list">
             {recentTracks.length ? recentTracks.map((track, i) => {
@@ -457,7 +481,7 @@ function HomePage({ onFavorites }: { onFavorites: () => void }) {
         </section>
       </div>
 
-      <section className="panel github-panel" aria-label="GitHub projects and activity">
+      <section className="panel github-panel" id="github" aria-label="GitHub projects and activity">
         <div className="panel-heading github-heading">
           <div><span className="eyebrow">GITHUB</span><h2>Projects &amp; activity</h2></div>
           <a className="github-profile-link" href="https://github.com/Melancholy-528" target="_blank" rel="noreferrer">View profile <span aria-hidden="true">↗</span></a>

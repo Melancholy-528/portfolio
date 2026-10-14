@@ -450,7 +450,7 @@ function HomePage({ onFavorites, onThoughts, startEntered = false }: { onFavorit
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('https://api.lanyard.rest/v1/users/524169169667883008', { signal: controller.signal })
+    fetch('https://api.lanyard.rest/v1/users/792370349652049960', { signal: controller.signal })
       .then((res) => res.json()).then((result) => {
         const user = result?.data?.discord_user
         if (!user) return
